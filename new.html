@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web Screencast</title>
+    <!-- PeerJS Library for WebRTC signaling -->
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background-color: #1a1a1a;
+        color: #ffffff;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+      .container {
+        background: #2a2a2a;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        text-align: center;
+        max-width: 500px;
+        width: 100%;
+      }
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        margin: 10px;
+        border-radius: 6px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      input {
+        padding: 12px;
+        border-radius: 6px;
+        border: 1px solid #444;
+        background: #333;
+        color: white;
+        font-size: 16px;
+        width: 80%;
+        margin-bottom: 15px;
+      }
+      video {
+        width: 100%;
+        max-width: 1000px;
+        background: #000;
+        border-radius: 8px;
+        display: none;
+        margin-top: 20px;
+      }
+      .hidden {
+        display: none;
+      }
+      #peer-id-display {
+        font-size: 24px;
+        font-weight: bold;
+        color: #4caf50;
+        letter-spacing: 2px;
+        margin: 15px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Main Selection Screen -->
+    <div id="selection-screen" class="container">
+      <h2>Web Screencast</h2>
+      <p>Choose this device's role:</p>
+      <button onclick="startReceiver()">I am the Laptop (Receiver)</button>
+      <button onclick="startSender()">I am the Phone (Sender)</button>
+    </div>
+
+    <!-- Receiver (Laptop) Screen -->
+    <div id="receiver-screen" class="container hidden">
+      <h2>Laptop: Waiting for connection...</h2>
+      <p>Enter this ID on your phone:</p>
+      <div id="peer-id-display">Generating...</div>
+    </div>
+
+    <!-- Sender (Phone) Screen -->
+    <div id="sender-screen" class="container hidden">
+      <h2>Phone: Cast Screen</h2>
+      <input type="text" id="connect-id" placeholder="Enter Laptop's ID here" />
+      <button onclick="castScreen()">Start Casting</button>
+      <p id="sender-status"></p>
+    </div>
+
+    <!-- Video Element to show the casted screen -->
+    <video id="cast-video" autoplay playsinline controls></video>
+
+    <script>
+      let peer;
+
+      // Hide all screens and show a specific one
+      function showScreen(screenId) {
+        document.getElementById("selection-screen").classList.add("hidden");
+        document.getElementById("receiver-screen").classList.add("hidden");
+        document.getElementById("sender-screen").classList.add("hidden");
+        document.getElementById(screenId).classList.remove("hidden");
+      }
+
+      // --- LAPTOP (RECEIVER) LOGIC ---
+      function startReceiver() {
+        showScreen("receiver-screen");
+
+        // Generate a random, easy-to-type ID (e.g., 4 digits)
+        const randomId = Math.floor(1000 + Math.random() * 9000).toString();
+        peer = new Peer(randomId);
+
+        peer.on("open", (id) => {
+          document.getElementById("peer-id-display").innerText = id;
+        });
+
+        // When the phone calls, answer and display the video stream
+        peer.on("call", (call) => {
+          call.answer(); // Answer the call automatically without sending a stream back
+          call.on("stream", (remoteStream) => {
+            document.getElementById("receiver-screen").classList.add("hidden");
+            const videoElement = document.getElementById("cast-video");
+            videoElement.style.display = "block";
+            videoElement.srcObject = remoteStream;
+          });
+        });
+      }
+
+      // --- PHONE (SENDER) LOGIC ---
+      function startSender() {
+        showScreen("sender-screen");
+        peer = new Peer(); // The phone doesn't need a specific ID
+      }
+
+      async function castScreen() {
+        const laptopId = document.getElementById("connect-id").value;
+        const statusEl = document.getElementById("sender-status");
+
+        if (!laptopId) {
+          alert("Please enter the Laptop's ID");
+          return;
+        }
+
+        try {
+          // Request screen capture permission from the user
+          const displayMediaOptions = {
+            video: { cursor: "always" },
+            audio: false,
+          };
+
+          statusEl.innerText = "Requesting screen access...";
+          const stream =
+            await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+
+          // Call the laptop using the entered ID and pass the stream
+          statusEl.innerText = "Connecting to laptop...";
+          const call = peer.call(laptopId, stream);
+
+          call.on("stream", () => {
+            // Receiver answered
+          });
+
+          // Stop casting if the user stops screen sharing via browser UI
+          stream.getVideoTracks()[0].onended = () => {
+            statusEl.innerText = "Casting stopped.";
+          };
+
+          statusEl.innerText = "Casting live! Look at your laptop.";
+        } catch (err) {
+          console.error("Error: ", err);
+          statusEl.innerText =
+            "Failed to capture screen. Note: iOS Safari does not support screen sharing.";
+        }
+      }
+    </script>
+  </body>
+</html>
